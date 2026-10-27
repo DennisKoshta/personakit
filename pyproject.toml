@@ -1,14 +1,15 @@
 [project]
 name = "personakit"
-version = "0.1.0"
-description = "Explain Qwen3.5 neurons, make persona steering recipes and port them across sizes, on Modal"
+version = "0.2.0"
+description = "Explain Qwen3.5 neurons, make persona steering recipes and port them across sizes, on your GPU or Modal"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = ["modal>=1.0"]
+dependencies = []
 
 [project.optional-dependencies]
-local = ["torch", "transformers>=5.20", "datasets", "numpy"]
+local = ["torch>=2.5", "transformers>=5.20", "datasets", "numpy", "accelerate"]
+modal = ["modal>=1.0"]
 
 [project.scripts]
 personakit = "personakit.cli:main"

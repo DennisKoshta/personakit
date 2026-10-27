@@ -1,5 +1,5 @@
 """personakit: explain a Qwen3.5 neuron, make a persona recipe and port it to another size. The command line runs the
-GPU work on Modal; `steer` applies a recipe to a model in your own code."""
+GPU work on this machine (--local) or on Modal; `steer` applies a recipe to a model in your own code."""
 import contextlib
 import json
 

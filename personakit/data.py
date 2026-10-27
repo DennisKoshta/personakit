@@ -1,6 +1,7 @@
 """Pinned weights and data, and the prompts personakit uses (those of the study it comes from, README.md)."""
 
-PACKAGES = ("torch==2.14.1", "transformers==5.20.2", "datasets==5.1.0", "numpy", "flash-linear-attention==0.6.0")
+PACKAGES = ("torch==2.14.1", "transformers==5.20.2", "datasets==5.1.0", "numpy", "accelerate==1.15.0",
+            "flash-linear-attention==0.6.0")
 MODELS = {"0.8b": ("Qwen/Qwen3.5-0.8B", "2fc06364715b967f1860aea9cf38778875588b17"),
           "2b": ("Qwen/Qwen3.5-2B", "15852e8c16360a2fea060d615a32b45270f8a8fc"),
           "4b": ("Qwen/Qwen3.5-4B", "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"),

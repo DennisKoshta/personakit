@@ -383,6 +383,17 @@ The rates below therefore lean on the identity, concept and coherence rubrics. T
   - to the 2B: 30% wizard.
 - **`twins` in the 9B:** a clear alien twin, L22 N10573+ (Spearman 0.30, lens ' alien', '外星'). It is much closer than anything in the 2B (at most 0.11).
 
+**K2, the kit on your own GPU** (`k2_local.py`, 2026-10-27, after the study; $1.91 in all). Version 0.2 adds `--local`, which runs the kit on the machine's own GPU at full size. The kit was pip-installed into a plain container with a 24 GB A10G and run with `--local`. `PERSONAKIT_GPU_GB` held some commands to 16 or 8 GB.
+- **It agrees with K1.**
+  - `explain` gave the same tokens, cosines and persona rates.
+  - `twins` gave the same 9B twin.
+  - `make` picked the same wizard cell, with 75% on held-out identity prompts against 80%.
+- **The judge can spill into CPU memory without changing a label.** On 16 GB, part of the 9B judge sat in CPU memory, and its labels matched those on 24 GB exactly.
+- **What each size needs:**
+  - 8 GB runs the 2B (`make`, including the atlas, in 5 minutes);
+  - 16 GB runs the 4B;
+  - on 24 GB, `twins` runs on the 9B, but `port` to the 9B ran out of memory. It still did after generation learned to halve a batch that doesn't fit, so a fixed-size forward pass is also too big.
+
 **Deviations from the design:**
 - Jobs ran on an A10G ($1.71/h with 32 GiB), not an L4. The 9B's own stages ran on an L40S: its 19 GB of weights leave a 24 GB card too little room to generate in batches.
 - The judge check used 100 benign replies as planned, split into 50 for the role rubric and 50 for the identity rubric.
@@ -433,12 +444,13 @@ Every stage is a Modal job in this folder, run through `modal_run` with the targ
 3. `h5_useful.py` and `x3_hoot.py`, after H3.
 4. For each other size: `s1_rollouts.py --model 2b|9b`, then `s1b_axis.py`, `h3_synthesis.py` and `x2_twins.py` with the same `--model`. The 9B's stages run on an L40S by themselves (`jobs.sized`).
 5. `k1_kit.py` checks the kit against S1 and S1b.
+6. `k2_local.py` checks the kit's `--local` path on a GPU (after the study).
 
 Model and dataset revisions are pinned in `jobs.py` and `../personakit/data.py`.
 
 ## Budget
 
-**Actual (Modal, from the spend ledger): $12.50 of the $25.** That includes the jobs a network blip cancelled, a K1 stopped for a bug the review found, and two first attempts that failed at launch.
+**Actual (Modal, from the spend ledger): $12.50 of the $25, and $1.91 more for K2 after the study.** That includes the jobs a network blip cancelled, a K1 stopped for a bug the review found, and two first attempts that failed at launch.
 
 | Stage | Runs | Cost |
 |---|---|---|
@@ -452,6 +464,7 @@ Model and dataset revisions are pinned in `jobs.py` and `../personakit/data.py`.
 | X2 twins (2B twice, 9B) | 3 | $0.47 |
 | X3 (one cancelled) | 2 | $0.60 |
 | K1, the kit's checks (two cancelled or stopped) | 3 | $2.00 |
+| K2, the kit on your own GPU (after the study; one failed at its image build, one rerun) | 3 | $1.91 |
 
 The plan, for comparison (L4 at $0.80/h, plus image builds and downloads; the user set $25 for this mission on 2026-10-26):
 
@@ -471,7 +484,7 @@ The remaining $13.5 is reserve: reruns, the X3 stretch, and the tool's own check
 
 ## Deliverable
 
-The kit at the root of this repository: a Python kit with a command line, whose GPU work runs on Modal. Its README has the install, the commands, each command's cost (4–6 minutes and $0.10–0.24 each), K1's checks and the findings above, written for someone using it.
+The kit at the root of this repository: a Python kit with a command line, whose GPU work runs on your own GPU (from 0.2) or on Modal. Its README has the install, the commands, each command's cost (4–6 minutes and $0.10–0.24 each), K1's checks and the findings above, written for someone using it.
 - **explain** `<layer> <neuron>` gives the neuron's projection on the Assistant Axis and the concept directions, its logit lens, its natural range and its dose in natural units. It doesn't predict whether the neuron breaks identity, since H4 found nothing that does. Instead it quotes H4's base rate and offers `--measure`.
 - **make** `"<persona>"` builds a concept-plus-axis recipe. It picks the cell that stays coherent on everyday requests as well as identity questions (H3's own pick didn't), then reports held-out persona rates, MMLU and KL. The README says what H5 found: start with a system prompt, and add the recipe to keep the persona.
 - **port** `<recipe> --to <model>` re-derives the recipe in another size.

@@ -1,8 +1,8 @@
 # personakit
 
-Explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and port it to another size. The GPU work runs on [Modal](https://modal.com), on your own account. The study behind it, with every number quoted here, is in [`study/README.md`](study/README.md).
+Explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and port it to another size. The GPU work runs on your own GPU, or on [Modal](https://modal.com) on your account. The study behind it, with every number quoted here, is in [`study/README.md`](study/README.md).
 
-**Status: 0.1, research code.** It covers the Qwen3.5 dense chat models (0.8B, 2B, 4B, 9B) and the 4B's Base twin.
+**Status: 0.2, research code.** It covers the Qwen3.5 dense chat models (0.8B, 2B, 4B, 9B) and the 4B's Base twin.
 
 ## What it does
 
@@ -22,23 +22,38 @@ Explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and p
 
 ## Install
 
+On your own machine, with an NVIDIA GPU:
+
 ```
-pip install "personakit @ git+https://github.com/DennisKoshta/personakit"
+pip install "personakit[local] @ git+https://github.com/DennisKoshta/personakit"
+pip install flash-linear-attention   # optional: fast kernels for Qwen3.5's linear-attention layers
+```
+
+Then pass `--local` to every command. Weights go in your Hugging Face cache, and atlases in `~/.cache/personakit/atlas` (or `$PERSONAKIT_ATLAS`). [What each size needs](#on-your-own-gpu) is below.
+
+On Modal instead:
+
+```
+pip install "personakit[modal] @ git+https://github.com/DennisKoshta/personakit"
 modal setup        # once, if you haven't used Modal before
 ```
 
-The first command on a model downloads its weights (and the 9B judge's, about 19 GB) into the Modal volume `personakit-hf`, and builds that model's **atlas** in `personakit-atlas`: the Assistant Axis, 40 role directions, 10 reference concepts and the dose unit. Later commands reuse both. `personakit build --model 4b` builds an atlas ahead of time.
+There, weights go in the Modal volume `personakit-hf`, and atlases in `personakit-atlas`.
 
-`--local` runs any command on your own machine instead, on the 0.8B at toy sizes. It checks that the kit works and means nothing else (`pip install "personakit[local] @ git+https://github.com/DennisKoshta/personakit"` first).
+The first command on a model downloads its weights, and every judged command needs the 9B judge's (about 19 GB). It also builds that model's **atlas**: the Assistant Axis, 40 role directions, 10 reference concepts and the dose unit. Later commands reuse both. `personakit build --model 4b` builds an atlas ahead of time.
+
+`--toy` runs any command on your own machine at toy sizes, on the 0.8B, even on a CPU. It checks that the kit works and means nothing else.
 
 ## Use
 
 ```
-personakit explain 22 2742 --sign + --model 4b --measure --concept "an alien"
-personakit make "a wizard" --about wizards --model 4b -o wizard.json
-personakit port wizard.json --to 9b -o wizard-9b.json
-personakit twins 22 2742 --sign + --from 4b --to 9b
+personakit --local explain 22 2742 --sign + --model 4b --measure --concept "an alien"
+personakit --local make "a wizard" --about wizards --model 4b -o wizard.json
+personakit --local port wizard.json --to 9b -o wizard-9b.json
+personakit --local twins 22 2742 --sign + --from 4b --to 9b
 ```
+
+Without `--local`, the same commands run on Modal.
 
 ```python
 import torch
@@ -58,7 +73,31 @@ A recipe belongs to the model size it was made on. Use `port` to move it to anot
 
 **Doses** are in the study's unit. A dose of d adds d · m_L · (unit direction) to the residual leaving layer L. m_L is the median norm of that residual on the Pile.
 
-## Cost and time
+## Hardware, time and cost
+
+### On your own GPU
+
+An NVIDIA GPU with 8 GB runs the 2B, and 16 GB runs the 4B. On 24 GB, `twins` runs on the 9B, but `make` and `port` to the 9B ran out of memory; they have run on 48 GB (on Modal). The model you study must fit on the GPU. The 9B judge (about 19 GB) doesn't have to: what doesn't fit stays in CPU memory and moves to the GPU a layer at a time as it scores. On an 8 GB card that is about 15 GB of RAM for the judge (an estimate).
+
+Measured on 2026-10-27 on a 24 GB A10G, with the kit installed as above (with flash-linear-attention) and the weights already downloaded. `PERSONAKIT_GPU_GB` held some commands to 16 or 8 GB, as on a smaller card. Minutes are each command's wall time, loading included.
+
+| Command | GPU | Minutes | Peak GPU memory |
+|---|---|---|---|
+| `build --model 4b` | 16 GB | 4.4 | 13.2 GB |
+| `make "a wizard" --model 4b` (atlas built) | 16 GB | 3.2 | 16.1 GB |
+| `make "a wizard" --model 4b` (atlas built) | 24 GB | 1.9 | 19.2 GB |
+| `explain 22 2742 --sign + --model 4b --measure --concept "an alien"` | 24 GB | 0.6 | 18.9 GB |
+| `twins 22 2742 --sign + --from 4b --to 9b` | 24 GB | 0.6 | 18.6 GB |
+| `make "a wizard" --model 2b` (including the 2B's atlas) | 8 GB | 5.0 | 7.4 GB |
+| `port wizard.json --to 9b` (including the 9B's atlas) | 24 GB | out of memory after 6.4 | 22 GB |
+
+The peaks come from nvidia-smi, which counts the CUDA context outside the cap. On 16 GB the judge partly sits in CPU memory, and its labels came out identical to those on 24 GB.
+
+When a batch of replies doesn't fit, the kit halves it until it does, and says so.
+
+`PERSONAKIT_GPU_GB=<n>` keeps the kit within n GB of the GPU, if you share it.
+
+### On Modal
 
 Measured on Modal on 2026-10-27, with the weights already cached. Minutes are each function's own time. Starting a container and loading the weights add a minute or two.
 
@@ -101,6 +140,11 @@ Each rate is over 20 held-out identity prompts or 10 everyday ones.
   - on the 2B, 20% wizard.
 - The 4B's wizard costs 7 MMLU points, and its interval excludes zero. The ported wizards cost 1–2 points, as did the study's own recipe (0.700 → 0.688). Check `cost` in a recipe before using it.
 
+Run with `--local` on a 24 GB GPU, with an atlas built afresh, the kit found the same:
+- `explain` gave the same tokens, cosines and persona rates as listed above, with its largest natural activation at dose 0.45;
+- `twins` gave the same twin, at the same Spearman;
+- `make` picked the same cell for the 4B's wizard, with 75% on held-out identity prompts against 80% (one prompt of 20).
+
 `twins 22 2742 --to 9b` finds a clear twin: L22 N10573+, Spearman 0.30, whose logit lens tops out on ' alien', '外星' and ' Alien'. Its next-best candidates are space-themed and much weaker (0.08–0.10).
 
 ## What the study found, and what that means for using it
@@ -130,6 +174,7 @@ These results come from Qwen3.5-4B unless a size is named. The intervals are 95%
 
 ## Limits
 
+- A CPU runs `--toy` and little else: the full commands generate hundreds of replies. On a Mac with Apple silicon and macOS 14, the kit uses its GPU, but that hasn't been checked.
 - Only Qwen3.5 dense models. Other families need their own `data.MODELS` entry, and the layer layout (`model.model.layers`) has to match.
 - The identity, concept and coherence labels come from a 9B judge. The judge is lenient about role-play.
 - The persona rates on each grid cell rest on 10 to 20 prompts. A recipe's "made" verdict is a small sample.

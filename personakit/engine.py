@@ -5,14 +5,39 @@ adds to one MLP neuron's activation silu(gate)*up at the input of down_proj. The
 by delta adds delta * W_down[:, n] to the layer's output. Every intervention applies at every position.
 """
 import gc
+import os
 
 import torch
 
-def load(path: str, device: str):
-    """The text model (no vision tower) in bf16 on a GPU, fp32 on a CPU, and its tokenizer (left padding)."""
+HEADROOM = 3 * 2 ** 30  # GPU bytes an offloaded model leaves free for its activations
+
+
+def gpu_cap():
+    """Bytes of the GPU personakit may use: $PERSONAKIT_GPU_GB, if set, as on a smaller card (the allocator is held
+    to it), or else the whole card."""
+    total = torch.cuda.get_device_properties(0).total_memory
+    if not os.environ.get("PERSONAKIT_GPU_GB"):
+        return total
+    cap = min(total, int(float(os.environ["PERSONAKIT_GPU_GB"]) * 2 ** 30))
+    torch.cuda.set_per_process_memory_fraction(cap / total)
+    return cap
+
+
+def load(path: str, device: str, offload: bool = False):
+    """The text model (no vision tower) in bf16 on a GPU, fp32 on a CPU, and its tokenizer (left padding). With
+    `offload`, on an NVIDIA GPU, layers that don't fit stay in CPU memory and move to the GPU as each batch needs them."""
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    dtype = torch.bfloat16 if device == "cuda" else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(path, dtype=dtype).to(device).eval().requires_grad_(False)
+    dtype = torch.float32 if device == "cpu" else torch.bfloat16
+    if offload and device == "cuda":
+        from accelerate.utils import get_max_memory
+        room = min(torch.cuda.mem_get_info()[0], gpu_cap() - torch.cuda.memory_reserved()) - HEADROOM
+        model = AutoModelForCausalLM.from_pretrained(path, dtype=dtype, device_map="auto",
+                                                     max_memory={0: max(room, 0), "cpu": get_max_memory()["cpu"]})
+        model = model.eval().requires_grad_(False)
+    else:
+        if device == "cuda":
+            gpu_cap()
+        model = AutoModelForCausalLM.from_pretrained(path, dtype=dtype).to(device).eval().requires_grad_(False)
     tok = AutoTokenizer.from_pretrained(path)
     tok.padding_side = "left"
     return model, tok
@@ -23,6 +48,8 @@ def free():
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
 
 
 def blocks(model):
@@ -167,10 +194,36 @@ def stops(tok) -> list[int]:
     return sorted({t for t in (tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id) if t is not None})
 
 
+_batch_cap = None  # the largest generation batch that fits on this GPU, once a bigger one hasn't
+
+
+def generate(model, tok, prompts: list[list[int]], max_new: int, sample: bool = False, seed: int = 0,
+             steer: tuple | None = None) -> list[list[int]]:
+    """New tokens for each prompt, cut at the first stop token. Greedy unless `sample` (T 0.7, top-p 0.9, as the
+    Assistant Axis paper's generation). `steer` (hooks, layer, [B, d] vectors) adds each prompt's own vector at the
+    layer. A batch too big for the GPU is halved until it fits, and later batches start at the size that did."""
+    global _batch_cap
+    n = min(len(prompts), _batch_cap or len(prompts))
+    if n < len(prompts):
+        return [r for s in range(0, len(prompts), n)
+                for r in generate(model, tok, prompts[s:s + n], max_new, sample, seed,
+                                  steer and (steer[0], steer[1], steer[2][s:s + n]))]
+    if steer:
+        steer[0].clear()
+        steer[0].add(steer[1], steer[2])
+    try:
+        return _generate(model, tok, prompts, max_new, sample, seed)
+    except torch.OutOfMemoryError:
+        if n == 1:
+            raise
+        _batch_cap = n // 2
+        print(f"[personakit] a batch of {n} replies doesn't fit on the GPU: generating {n // 2} at a time", flush=True)
+    free()  # outside the except block, whose traceback still holds the failed batch's tensors
+    return generate(model, tok, prompts, max_new, sample, seed, steer)
+
+
 @torch.inference_mode()
-def generate(model, tok, prompts: list[list[int]], max_new: int, sample: bool = False, seed: int = 0) -> list[list[int]]:
-    """New tokens for each prompt (one batch), cut at the first stop token. Greedy unless `sample` (T 0.7, top-p 0.9,
-    as the Assistant Axis paper's generation)."""
+def _generate(model, tok, prompts: list[list[int]], max_new: int, sample: bool, seed: int) -> list[list[int]]:
     ids, mask = pad_left(prompts, tok.pad_token_id, model.device)
     if sample:
         torch.manual_seed(seed)

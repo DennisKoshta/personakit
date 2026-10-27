@@ -1,5 +1,6 @@
-"""personakit's command line. Each command runs one function of personakit.remote on Modal (on your account) and
-prints what it found; -o writes the full result as JSON (for make and port, the recipe that `personakit.steer` reads).
+"""personakit's command line. Each command runs one function of personakit.core, on Modal (on your account) or with
+--local on this machine's GPU, and prints what it found; -o writes the full result as JSON (for make and port, the
+recipe that `personakit.steer` reads).
 
     personakit explain 22 2742 --sign + --model 4b --measure --concept "an alien"
     personakit make "a pirate" --about pirates --model 4b -o pirate.json
@@ -7,8 +8,7 @@ prints what it found; -o writes the full result as JSON (for make and port, the 
     personakit twins 22 2742 --sign + --from 4b --to 9b
     personakit build --model 2b
 
---local runs the same code on this machine instead, on the 0.8B at toy sizes (a check that the kit works, not a
-result).
+--toy runs the same code on this machine at toy sizes, on the 0.8B (a check that the kit works, not a result).
 """
 import argparse
 import json
@@ -22,14 +22,28 @@ H4_PRIOR = ("in the study, 3 of 406 Qwen3.5-4B neurons broke the model's identit
             "predicted which: measure it (--measure)")
 
 
+INSTALL = "pip install 'personakit[{}] @ git+https://github.com/DennisKoshta/personakit'"
+
+
 def call(fn: str, key: str, args: argparse.Namespace, *params, **kw):
-    from . import remote as R
-    f = getattr(R, fn)
-    if args.local:
-        return f.local(*params, size="toy", **kw)
-    import modal
+    if args.local or args.toy:
+        try:  # the local extra's packages load as the work needs them
+            import torch
+            from . import core as C
+            try:
+                return getattr(C, fn)(*params, size="toy" if args.toy else "full", **kw)
+            except torch.OutOfMemoryError:
+                sys.exit(f"personakit: out of GPU memory. The {key} must fit on the GPU, with room to generate (the "
+                         "README's table says how much each size needs); the 9B judge moves into CPU memory by itself.")
+        except ImportError as e:
+            sys.exit(f"personakit --local needs {e.name}: {INSTALL.format('local')}")
+    try:
+        import modal
+        from . import remote as R
+    except ImportError:
+        sys.exit(f"personakit runs on Modal unless you pass --local: {INSTALL.format('modal')}, then `modal setup`")
     with modal.enable_output(), R.app.run():
-        return R.wait(f.with_options(gpu=D.gpu_for(key)).spawn(*params, **kw))
+        return R.wait(getattr(R, fn).with_options(gpu=D.gpu_for(key)).spawn(*params, **kw))
 
 
 def sign_of(s: str) -> int:
@@ -90,7 +104,8 @@ def print_recipe(r: dict):
 
 def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser(prog="personakit", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--local", action="store_true", help="run on this machine: the 0.8B at toy sizes, as a check")
+    p.add_argument("--local", action="store_true", help="run on this machine's GPU instead of on Modal")
+    p.add_argument("--toy", action="store_true", help="run on this machine at toy sizes, on the 0.8B: a check")
     sub = p.add_subparsers(dest="cmd", required=True)
     models = sorted(D.MODELS)
 
@@ -124,7 +139,7 @@ def main(argv: list[str] | None = None):
     for s in (b, e, m, t, w):
         s.add_argument("-o", "--out", help="write the full result here as JSON")
     a = p.parse_args(argv)
-    key = "0.8b" if a.local else getattr(a, "model", None) or getattr(a, "to", None)
+    key = "0.8b" if a.toy else getattr(a, "model", None) or getattr(a, "to", None)
 
     if a.cmd == "build":
         r = call("build", key, a, key)
@@ -142,7 +157,7 @@ def main(argv: list[str] | None = None):
         r = call("port", key, a, recipe, key)
         print_recipe(r)
     else:
-        src = "0.8b" if a.local else a.src
+        src = "0.8b" if a.toy else a.src
         r = call("twins", key, a, src, a.layer, a.neuron, a.sign, key)
         print(f"\nL{a.layer} N{a.neuron}{'+' if a.sign > 0 else '-'} on {src}: {' | '.join(repr(x) for x in r['lens_top'])}")
         for x in r["twins"]:
