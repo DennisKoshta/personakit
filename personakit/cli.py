@@ -32,9 +32,13 @@ def call(fn: str, key: str, args: argparse.Namespace, *params, **kw):
             from . import core as C
             try:
                 return getattr(C, fn)(*params, size="toy" if args.toy else "full", **kw)
-            except torch.OutOfMemoryError:
-                sys.exit(f"personakit: out of GPU memory. The {key} must fit on the GPU, with room to generate (the "
-                         "README's table says how much each size needs); the 9B judge moves into CPU memory by itself.")
+            except torch.OutOfMemoryError as e:
+                import traceback
+                at = next((f"{f.filename.rsplit('/', 1)[-1]}:{f.lineno}, in {f.name}"
+                           for f in reversed(traceback.extract_tb(e.__traceback__)) if "personakit" in f.filename), "")
+                sys.exit(f"personakit: out of GPU memory ({at}). The {key} must fit on the GPU, with room to generate "
+                         "(the README's table says how much each size needs); the 9B judge moves into CPU memory by "
+                         "itself.")
         except ImportError as e:
             sys.exit(f"personakit --local needs {e.name}: {INSTALL.format('local')}")
     try:

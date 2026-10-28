@@ -383,16 +383,17 @@ The rates below therefore lean on the identity, concept and coherence rubrics. T
   - to the 2B: 30% wizard.
 - **`twins` in the 9B:** a clear alien twin, L22 N10573+ (Spearman 0.30, lens ' alien', '外星'). It is much closer than anything in the 2B (at most 0.11).
 
-**K2, the kit on your own GPU** (`k2_local.py`, 2026-10-27, after the study; $1.91 in all). Version 0.2 adds `--local`, which runs the kit on the machine's own GPU at full size. The kit was pip-installed into a plain container with a 24 GB A10G and run with `--local`. `PERSONAKIT_GPU_GB` held some commands to 16 or 8 GB.
+**K2, the kit on your own GPU** (`k2_local.py`, 2026-10-27, after the study; $2.73 in all). Version 0.2 adds `--local`, which runs the kit on the machine's own GPU at full size. The kit was pip-installed into a plain container with a 24 GB A10G and run with `--local`. `PERSONAKIT_GPU_GB` held some commands to 16 or 8 GB.
 - **It agrees with K1.**
   - `explain` gave the same tokens, cosines and persona rates.
   - `twins` gave the same 9B twin.
   - `make` picked the same wizard cell, with 75% on held-out identity prompts against 80%.
+  - `port` to the 9B, with its own atlas, picked the neighbouring cell, (0.375, 0.25), with 55% against 70%.
 - **The judge can spill into CPU memory without changing a label.** On 16 GB, part of the 9B judge sat in CPU memory, and its labels matched those on 24 GB exactly.
 - **What each size needs:**
   - 8 GB runs the 2B (`make`, including the atlas, in 5 minutes);
   - 16 GB runs the 4B;
-  - on 24 GB, `twins` runs on the 9B, but `port` to the 9B ran out of memory. It still did after generation learned to halve a batch that doesn't fit, so a fixed-size forward pass is also too big.
+  - 24 GB runs the 9B (`port`, including the atlas, in 15 minutes). On the first two tries, `port` to the 9B ran out of memory: first while generating 100 replies at a time, then while scoring MMLU 32 at a time. Since then, the kit halves any batch that doesn't fit.
 
 **Deviations from the design:**
 - Jobs ran on an A10G ($1.71/h with 32 GiB), not an L4. The 9B's own stages ran on an L40S: its 19 GB of weights leave a 24 GB card too little room to generate in batches.
@@ -450,7 +451,7 @@ Model and dataset revisions are pinned in `jobs.py` and `../personakit/data.py`.
 
 ## Budget
 
-**Actual (Modal, from the spend ledger): $12.50 of the $25, and $1.91 more for K2 after the study.** That includes the jobs a network blip cancelled, a K1 stopped for a bug the review found, and two first attempts that failed at launch.
+**Actual (Modal, from the spend ledger): $12.50 of the $25, and $2.73 more for K2 after the study.** That includes the jobs a network blip cancelled, a K1 stopped for a bug the review found, and two first attempts that failed at launch.
 
 | Stage | Runs | Cost |
 |---|---|---|
@@ -464,7 +465,7 @@ Model and dataset revisions are pinned in `jobs.py` and `../personakit/data.py`.
 | X2 twins (2B twice, 9B) | 3 | $0.47 |
 | X3 (one cancelled) | 2 | $0.60 |
 | K1, the kit's checks (two cancelled or stopped) | 3 | $2.00 |
-| K2, the kit on your own GPU (after the study; one failed at its image build, one rerun) | 3 | $1.91 |
+| K2, the kit on your own GPU (after the study; one failed at its image build, two reruns for the 9B) | 4 | $2.73 |
 
 The plan, for comparison (L4 at $0.80/h, plus image builds and downloads; the user set $25 for this mission on 2026-10-26):
 

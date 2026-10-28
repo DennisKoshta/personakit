@@ -77,7 +77,7 @@ A recipe belongs to the model size it was made on. Use `port` to move it to anot
 
 ### On your own GPU
 
-An NVIDIA GPU with 8 GB runs the 2B, and 16 GB runs the 4B. On 24 GB, `twins` runs on the 9B, but `make` and `port` to the 9B ran out of memory; they have run on 48 GB (on Modal). The model you study must fit on the GPU. The 9B judge (about 19 GB) doesn't have to: what doesn't fit stays in CPU memory and moves to the GPU a layer at a time as it scores. On an 8 GB card that is about 15 GB of RAM for the judge (an estimate).
+An NVIDIA GPU with 8 GB runs the 2B, 16 GB runs the 4B, and 24 GB runs the 9B. The model you study must fit on the GPU. The 9B judge (about 19 GB) doesn't have to: what doesn't fit stays in CPU memory and moves to the GPU a layer at a time as it scores. On an 8 GB card that is about 15 GB of RAM for the judge (an estimate).
 
 Measured on 2026-10-27 on a 24 GB A10G, with the kit installed as above (with flash-linear-attention) and the weights already downloaded. `PERSONAKIT_GPU_GB` held some commands to 16 or 8 GB, as on a smaller card. Minutes are each command's wall time, loading included.
 
@@ -89,11 +89,11 @@ Measured on 2026-10-27 on a 24 GB A10G, with the kit installed as above (with fl
 | `explain 22 2742 --sign + --model 4b --measure --concept "an alien"` | 24 GB | 0.6 | 18.9 GB |
 | `twins 22 2742 --sign + --from 4b --to 9b` | 24 GB | 0.6 | 18.6 GB |
 | `make "a wizard" --model 2b` (including the 2B's atlas) | 8 GB | 5.0 | 7.4 GB |
-| `port wizard.json --to 9b` (including the 9B's atlas) | 24 GB | out of memory after 6.4 | 22 GB |
+| `port wizard.json --to 9b` (including the 9B's atlas) | 24 GB | 14.8 | 22.0 GB |
 
 The peaks come from nvidia-smi, which counts the CUDA context outside the cap. On 16 GB the judge partly sits in CPU memory, and its labels came out identical to those on 24 GB.
 
-When a batch of replies doesn't fit, the kit halves it until it does, and says so.
+When a batch doesn't fit, the kit halves it until it does, and says so. On 24 GB, the 9B generated 50 replies at a time instead of 100, and scored MMLU 16 items at a time instead of 32.
 
 `PERSONAKIT_GPU_GB=<n>` keeps the kit within n GB of the GPU, if you share it.
 
@@ -143,7 +143,8 @@ Each rate is over 20 held-out identity prompts or 10 everyday ones.
 Run with `--local` on a 24 GB GPU, with an atlas built afresh, the kit found the same:
 - `explain` gave the same tokens, cosines and persona rates as listed above, with its largest natural activation at dose 0.45;
 - `twins` gave the same twin, at the same Spearman;
-- `make` picked the same cell for the 4B's wizard, with 75% on held-out identity prompts against 80% (one prompt of 20).
+- `make` picked the same cell for the 4B's wizard, with 75% on held-out identity prompts against 80% (one prompt of 20);
+- `port` to the 9B picked the neighbouring cell, (0.375, 0.25), with 55% wizard, all coherent, and MMLU 0.775 → 0.755 [−0.06, +0.02]. On Modal, with its own atlas, it picked (0.375, 0.375), with 70%.
 
 `twins 22 2742 --to 9b` finds a clear twin: L22 N10573+, Spearman 0.30, whose logit lens tops out on ' alien', '外星' and ' Alien'. Its next-best candidates are space-themed and much weaker (0.08–0.10).
 

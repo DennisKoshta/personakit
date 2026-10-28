@@ -71,11 +71,11 @@ def score(model, tok, recs: list[dict], rubrics: list[str], batch: int = 16) -> 
         built = {i: bodies[rubric].format(question=recs[i]["question"], answer=recs[i]["reply"][:3000],
                                           concept=recs[i].get("concept", "")) for i in todo}
         order = sorted(todo, key=lambda i: len(built[i]))
-        for s in range(0, len(order), batch):
-            idx = order[s:s + batch]
+
+        def picks(idx):
             ids, mask = E.pad_left([E.chat_ids(tok, built[i]) for i in idx], tok.pad_token_id, model.device)
             with torch.inference_mode():
-                logits = model(input_ids=ids, attention_mask=mask, logits_to_keep=1).logits[:, -1, digits]
-            for i, p in zip(idx, logits.argmax(-1).tolist()):
-                labels[i][rubric] = int(p)
+                return model(input_ids=ids, attention_mask=mask, logits_to_keep=1).logits[:, -1, digits].argmax(-1).tolist()
+        for i, p in zip(order, E.batched(picks, order, batch)):
+            labels[i][rubric] = int(p)
     return labels

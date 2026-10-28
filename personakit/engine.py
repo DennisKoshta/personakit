@@ -52,6 +52,27 @@ def free():
         torch.mps.empty_cache()
 
 
+def batched(fn, items: list, batch: int) -> list:
+    """fn over items, `batch` at a time, its lists of results joined; a batch too big for the GPU is halved until it
+    fits."""
+    out, s = [], 0
+    while s < len(items):
+        chunk, fits = items[s:s + batch], False
+        try:
+            out += fn(chunk)
+            fits = True
+        except torch.OutOfMemoryError:
+            if batch == 1:
+                raise
+        if fits:
+            s += len(chunk)
+        else:  # outside the except block, whose traceback still holds the failed batch's tensors
+            batch //= 2
+            print(f"[personakit] {len(chunk)} at a time doesn't fit on the GPU: {batch} at a time", flush=True)
+            free()
+    return out
+
+
 def blocks(model):
     return model.model.layers
 
@@ -270,36 +291,36 @@ def mmlu(model, tok, rows: list[dict], system: str = "", batch: int = 32) -> lis
                           f"{r['subject'].replace('_', ' ')}.\n\n{r['question'].strip()}\n"
                           + "".join(f"{c}. {t}\n" for c, t in zip("ABCD", r["choices"])), system, reply="Answer:")
             for r in rows]
-    right = []
-    for s in range(0, len(seqs), batch):
-        ids, mask = pad_left(seqs[s:s + batch], tok.pad_token_id, model.device)
-        logits = model(input_ids=ids, attention_mask=mask, logits_to_keep=1).logits[:, -1, letters]
-        right += [int(int(p) == r["answer"]) for p, r in zip(logits.argmax(-1).tolist(), rows[s:s + batch])]
-    return right
+
+    def picks(chunk):
+        ids, mask = pad_left(chunk, tok.pad_token_id, model.device)
+        return model(input_ids=ids, attention_mask=mask, logits_to_keep=1).logits[:, -1, letters].argmax(-1).tolist()
+    return [int(p == r["answer"]) for p, r in zip(batched(picks, seqs, batch), rows)]
 
 
 @torch.inference_mode()
 def kl_from_base(model, hooks: Hooks, docs: list[list[int]], setups: dict, batch: int = 4) -> dict:
     """Mean next-token KL(unsteered || steered) per token (the first excluded) over docs, for each setup: a name ->
     list of (layer, vector) adds."""
-    tot, n = {k: 0.0 for k in setups}, 0
-    for s in range(0, len(docs), batch):
-        ids, mask = pad_left(docs[s:s + batch], 0, model.device)
+    def sums(chunk):  # [(the chunk's summed KL per setup, its tokens)]
+        ids, mask = pad_left(chunk, 0, model.device)
         keep = mask.bool().clone()
         keep[torch.arange(len(ids)), (mask == 0).sum(1)] = False  # each doc's first token
         hooks.clear()
         base = model(input_ids=ids, attention_mask=mask).logits[keep].float().log_softmax(-1)
+        tot = {}
         for k, adds in setups.items():
             hooks.clear()
             for L, v in adds:
                 hooks.add(L, v)
             lp = model(input_ids=ids, attention_mask=mask).logits[keep].float().log_softmax(-1)
-            tot[k] += float((base.exp() * (base - lp)).sum())
+            tot[k] = float((base.exp() * (base - lp)).sum())
             del lp
-        n += int(keep.sum())
-        del base
+        return [(tot, int(keep.sum()))]
+    parts = batched(sums, docs, batch)
     hooks.clear()
-    return {k: v / n for k, v in tot.items()}
+    n = sum(t for _, t in parts)
+    return {k: sum(p[k] for p, _ in parts) / n for k in setups}
 
 
 @torch.inference_mode()
