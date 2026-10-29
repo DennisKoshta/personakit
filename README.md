@@ -1,6 +1,6 @@
 # personakit
 
-Explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and port it to another model size. The GPU work runs on your own GPU or on [Modal](https://modal.com).
+Find the neurons behind a concept, explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and port it to another model size. The GPU work runs on your own GPU or on [Modal](https://modal.com).
 
 **Status: 0.2, research code.** Qwen3.5 dense chat models (0.8B, 2B, 4B, 9B) and the 4B Base. The [cross-family study](followups/cross-family-transfer/README.md) also ran it on Qwen2.5-3B and Llama-3.2-3B.
 
@@ -34,8 +34,11 @@ The prompt makes the persona; the clamp keeps it under pressure. Across 5 held-o
 
 ```
 pip install "personakit[local] @ git+https://github.com/DennisKoshta/personakit"
+personakit --local find aliens --model 4b          # automated neuron search: which neurons write "aliens"?
 personakit --local make "a wizard" --about wizards --model 4b -o wizard.json
 ```
+
+`find` replaces hand-hunting: it builds the concept's direction from the model's own answers and ranks every neuron's output column against it, layer by layer. On the 4B, `find aliens` returns the alien neuron the original study found by hand, L22 N2742+, first, at 1.9× the runner-up (layers 10–31, the default). The first result above is the same retrieval on the study's own scripts.
 
 ```python
 with personakit.steer(model, "wizard.json"):

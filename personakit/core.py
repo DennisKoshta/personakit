@@ -1,7 +1,7 @@
-"""personakit's work, wherever it runs: build a model's atlas, explain a neuron, make (or port) a persona recipe and
-find a neuron's twins in another model. The command line calls these on this machine (--local) or through
-personakit.remote on Modal. Weights go in the Hugging Face cache, atlases in $PERSONAKIT_ATLAS (default
-~/.cache/personakit/atlas).
+"""personakit's work, wherever it runs: build a model's atlas, find the neurons that point at a concept, explain a
+neuron, make (or port) a persona recipe and find a neuron's twins in another model. The command line calls these on
+this machine (--local) or through personakit.remote on Modal. Weights go in the Hugging Face cache, atlases in
+$PERSONAKIT_ATLAS (default ~/.cache/personakit/atlas).
 
 Doses are in the study's unit: a dose of d adds d * m_L * (unit direction) to the residual leaving layer L, where m_L is
 the median norm of that residual on the Pile.
@@ -258,19 +258,57 @@ def explain(key: str, layer: int, neuron: int, sign: int, measure: bool = False,
     return out
 
 
-def _concept_dir(model, tok, atlas: dict, about: str, layer: int, sz: dict):
-    """The concept's unit direction at `layer`: the mean residual over the model's neutral answers about it, minus
-    the reference concepts' (bar itself), with the Assistant Axis component removed."""
+def _concept_dirs(model, tok, atlas: dict, about: str, layers: list[int], sz: dict):
+    """[len(layers), d]: the concept's unit direction at each layer, the mean residual over the model's neutral answers
+    about it, minus the reference concepts' (bar itself), with the Assistant Axis component removed."""
     from . import engine as E
     ids = [E.chat_ids(tok, q.format(x=about)) for q in D.CONCEPT_QUESTIONS[:sz["concept_q"]]]
     outs = E.generate(model, tok, ids, sz["max_new"])
     with E.Hooks(model) as hooks:
-        mean = E.span_means(model, hooks, [a + b for a, b in zip(ids, outs)], [len(a) for a in ids], [layer])[:, 0].mean(0)
+        mean = E.span_means(model, hooks, [a + b for a, b in zip(ids, outs)], [len(a) for a in ids], layers).mean(0)
     keep = [i for i, c in enumerate(atlas["concepts"]) if c != about]
-    v = mean - atlas["concept_means"][keep, layer].float().mean(0)
-    u = atlas["unit"][layer]
-    v = v - (v @ u) * u
-    return v / v.norm()
+    v = mean - atlas["concept_means"][keep][:, layers].float().mean(0)
+    u = atlas["unit"][layers]
+    v = v - (v * u).sum(-1, keepdim=True) * u
+    return v / v.norm(dim=-1, keepdim=True)
+
+
+def _concept_dir(model, tok, atlas: dict, about: str, layer: int, sz: dict):
+    return _concept_dirs(model, tok, atlas, about, [layer], sz)[0]
+
+
+def find(key: str, about: str, layers: list[int] | None = None, top: int = 10, early: bool = False,
+         size: str = "full") -> dict:
+    """The neurons whose down column points most along a concept: the concept's direction at each layer against that
+    layer's normalised down columns (weights only, no pushing). Cosines run higher in some layers than others, so the
+    `top` hits are ranked by each |cosine| over its own layer's spread; the sign is the direction to push the neuron.
+    By default only from layer 10/32 of the depth on, `layers` aside: the studies searched L16 and L22, every known
+    persona neuron sits from there on, and early layers' concept directions follow spelling more than meaning (their
+    best hits have noise for a lens). `early` searches every layer."""
+    from . import engine as E
+    sz = SIZES[size]
+    atlas = _atlas(key, sz)
+    model, tok = _load(key)
+    n_layers = model.config.num_hidden_layers
+    layers = layers or list(range(0 if early else n_layers * 10 // 32, n_layers))
+    dirs = _concept_dirs(model, tok, atlas, about, layers, sz).to(model.device)
+    cands = []
+    for c, L in zip(dirs, layers):
+        W = E.blocks(model)[L].mlp.down_proj.weight.float()
+        cos = c @ (W / W.norm(dim=0, keepdim=True))
+        z = cos / cos.std()
+        t = z.abs().topk(min(top + 1, len(z)))
+        cands += [(float(z[i]), float(cos[i]), L, int(i)) for i in t.indices]
+        del W
+    cands.sort(key=lambda x: -abs(x[0]))
+    hits = []
+    for zs, cos, L, n in cands[:top]:
+        w = E.down_col(model, L, n)
+        lens = E.lens(model, (w / w.norm() * (1 if cos > 0 else -1))[None])[0]
+        hits.append({"layer": L, "neuron": n, "sign": 1 if cos > 0 else -1, "cos": round(abs(cos), 4),
+                     "z": round(abs(zs), 1), "lens_top": [tok.decode([i]) for i in lens.topk(8).indices.tolist()]})
+    return {"model": key, "about": about, "layers": [layers[0], layers[-1]], "hits": hits,
+            "runner_up_ratio": round(abs(cands[0][0]) / abs(cands[1][0]), 2) if len(cands) > 1 else None}
 
 
 def _make(key: str, name: str, about: str, sz: dict, cells: list | None = None) -> dict:

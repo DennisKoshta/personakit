@@ -2,6 +2,7 @@
 --local on this machine's GPU, and prints what it found; -o writes the full result as JSON (for make and port, the
 recipe that `personakit.steer` reads).
 
+    personakit find aliens --model 4b
     personakit explain 22 2742 --sign + --model 4b --measure --concept "an alien"
     personakit make "a pirate" --about pirates --model 4b -o pirate.json
     personakit port pirate.json --to 9b -o pirate-9b.json
@@ -62,6 +63,17 @@ def show_rates(r: dict) -> str:
     return f"{', '.join(parts)} (n {r['n']})"
 
 
+def print_find(r: dict):
+    print(f"\nNeurons in {r['model']} (layers {r['layers'][0]}-{r['layers'][1]}) whose down column points along "
+          f"{r['about']!r}, by |cosine| over each layer's spread; the best is {r['runner_up_ratio']}x the runner-up")
+    for h in r["hits"]:
+        print(f"  L{h['layer']} N{h['neuron']}{'+' if h['sign'] > 0 else '-'}: cosine {h['cos']:.3f} (z {h['z']}); "
+              f"{' | '.join(repr(t) for t in h['lens_top'][:6])}")
+    h = r["hits"][0]
+    print(f"  next: personakit explain {h['layer']} {h['neuron']} --sign {'+' if h['sign'] > 0 else '-'} "
+          f"--model {r['model']} --measure --concept {r['about']!r}")
+
+
 def print_explain(r: dict):
     print(f"\nL{r['layer']} N{r['neuron']}{'+' if r['sign'] > 0 else '-'} on {r['model']}")
     print(f"  logit lens, up:   {' | '.join(repr(t) for t in r['lens_top'])}")
@@ -116,6 +128,13 @@ def main(argv: list[str] | None = None):
     b = sub.add_parser("build", help="build a model's atlas (made on first use otherwise)")
     b.add_argument("--model", default="4b", choices=models)
 
+    f = sub.add_parser("find", help="the neurons whose down columns point most along a concept (weights only)")
+    f.add_argument("concept", help='the concept ("aliens")')
+    f.add_argument("--model", default="4b", choices=models)
+    f.add_argument("--layers", help="a layer or a range, 20-24 (default: from layer 10/32 of the depth on)")
+    f.add_argument("--early", action="store_true", help="search the early layers too (noisy: their hits follow spelling)")
+    f.add_argument("--top", type=int, default=10)
+
     e = sub.add_parser("explain", help="what a neuron points at, and with --measure what pushing it does")
     e.add_argument("layer", type=int)
     e.add_argument("neuron", type=int)
@@ -140,7 +159,7 @@ def main(argv: list[str] | None = None):
     w.add_argument("--from", dest="src", default="4b", choices=models)
     w.add_argument("--to", required=True, choices=models)
 
-    for s in (b, e, m, t, w):
+    for s in (b, f, e, m, t, w):
         s.add_argument("-o", "--out", help="write the full result here as JSON")
     a = p.parse_args(argv)
     key = "0.8b" if a.toy else getattr(a, "model", None) or getattr(a, "to", None)
@@ -148,6 +167,11 @@ def main(argv: list[str] | None = None):
     if a.cmd == "build":
         r = call("build", key, a, key)
         print(json.dumps(r, indent=1))
+    elif a.cmd == "find":
+        lo, _, hi = (a.layers or "").partition("-")
+        layers = list(range(int(lo), int(hi or lo) + 1)) if lo else None
+        r = call("find", key, a, key, a.concept, layers, a.top, a.early)
+        print_find(r)
     elif a.cmd == "explain":
         r = call("explain", key, a, key, a.layer, a.neuron, a.sign, a.measure, a.concept)
         print_explain(r)

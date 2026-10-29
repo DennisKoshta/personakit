@@ -35,3 +35,5 @@ Run with `--local` on a 24 GB GPU, with an atlas built afresh, the kit found the
 - `port` to the 9B picked the neighbouring cell, (0.375, 0.25), with 55% wizard, all coherent, and MMLU 0.775 → 0.755 [−0.06, +0.02]. On Modal, with its own atlas, it picked (0.375, 0.375), with 70%.
 
 `twins 22 2742 --to 9b` finds a clear twin: L22 N10573+, Spearman 0.30, whose logit lens tops out on ' alien', '外星' and ' Alien'. Its next-best candidates are space-themed and much weaker (0.08–0.10).
+
+`find aliens --model 4b` (weights only, default layers 10–31) returns L22 N2742+ first: cosine 0.556, 1.9× the runner-up, lens ' alien' | ' aliens' | '外星'. With `--early` the top hit is instead L7 N8842, whose lens is noise.

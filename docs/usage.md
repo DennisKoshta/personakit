@@ -26,6 +26,12 @@ The first command on a model downloads its weights, and every judged command nee
 
 ## Commands
 
+- **`find <concept>`**: automated neuron search. The neurons whose output (`W_down`) column points most along a concept, from weights only, with no pushing.
+  - It builds the concept's direction at each layer (the model's own answers about it, minus the reference concepts', with the Assistant Axis part removed) and takes its cosine with every normalised column.
+  - Hits are ranked by how far each cosine stands out in its own layer (|cosine| over that layer's spread), with the sign to push, the logit lens and how far the best is above the runner-up.
+  - It searches from layer 10/32 of the depth on (layer 10 in the 4B). `--layers 20-24` narrows it and `--early` opens every layer, but early layers' concept directions follow spelling more than meaning, and their best hits have noise for a lens: on the 4B they outrank the alien neuron.
+  - On the 4B, `find aliens` returns L22 N2742+ first (cosine 0.556), 1.9× the runner-up. Check a hit with `explain --measure`.
+  - Use the plural noun the atlas knows (`aliens`) when there is one: a reference concept is left out of the baseline only when the names match.
 - **`explain <layer> <neuron>`**: what one MLP neuron points at.
   - Its logit lens: the tokens its write direction promotes and suppresses.
   - Its cosine with the model's Assistant Axis, and that cosine's percentile in its layer.

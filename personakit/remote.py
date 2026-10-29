@@ -58,6 +58,12 @@ def explain(key: str, layer: int, neuron: int, sign: int, measure: bool = False,
 
 
 @app.function(**FN)
+def find(key: str, about: str, layers: list | None = None, top: int = 10, early: bool = False,
+         size: str = "full") -> dict:
+    return _synced(C.find, key, about, layers, top, early, size)
+
+
+@app.function(**FN)
 def make(key: str, name: str, about: str, size: str = "full") -> dict:
     return _synced(C.make, key, name, about, size)
 
