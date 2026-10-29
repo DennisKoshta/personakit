@@ -30,7 +30,7 @@ def fetch(path: str):
 
 
 def out_dir(tag: str) -> pathlib.Path:
-    """This run's folder: on the volume in a container, under ~/workspace/persona-neurons in a local check."""
+    """This run's folder: on the volume in a container, under a local output folder in a local check."""
     root = pathlib.Path.home() / "workspace" / "persona-neurons" if modal.is_local() else pathlib.Path("/out")
     (root / tag).mkdir(parents=True, exist_ok=True)
     return root / tag

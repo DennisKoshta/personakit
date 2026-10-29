@@ -8,7 +8,7 @@
 4. twins of the alien neuron in the 9B.
 
 The kit reads weights from the study's cache volume (crucible-hf-cache) and keeps its atlases in personakit-atlas.
-Results go to ~/workspace/persona-neurons/k1/ (this entrypoint runs locally) and the CRUCIBLE_RESULT lines. Run
+Results go to a local output folder (this entrypoint runs locally) and the CRUCIBLE_RESULT lines. Run
 through modal_run with gpu L40S (the 9B steps run on one) and containers 2, experiment "persona-neurons", config
 {"stage": "k1"}. Smoke: `python research/check.py research/2026-10-26-persona-neurons/k1_kit.py --smoke` (the 0.8B,
 toy sizes, no comparison).

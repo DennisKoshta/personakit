@@ -11,7 +11,7 @@ A10G container (24 GB, like an RTX 3090 or 4090), one command at a time. $PERSON
 
 A second container runs the Modal backend once (explain on the 0.8B, weights only), as a check of personakit.remote.
 Weights come from the study's cache volume (crucible-hf-cache); atlases are built fresh in the container. Results go
-to ~/workspace/persona-neurons/k2/ (this entrypoint runs locally) and the CRUCIBLE_RESULT lines. Run through modal_run
+to a local output folder (this entrypoint runs locally) and the CRUCIBLE_RESULT lines. Run through modal_run
 with containers 2, experiment "persona-neurons", config {"stage": "k2"}.
 """
 import json
