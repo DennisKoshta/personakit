@@ -39,6 +39,8 @@ def load(path: str, device: str, offload: bool = False):
             gpu_cap()
         model = AutoModelForCausalLM.from_pretrained(path, dtype=dtype).to(device).eval().requires_grad_(False)
     tok = AutoTokenizer.from_pretrained(path)
+    if tok.pad_token_id is None:
+        tok.pad_token_id = tok.eos_token_id
     tok.padding_side = "left"
     return model, tok
 
@@ -87,7 +89,10 @@ def chat_ids(tok, user: str, system: str = "", reply: str | None = None, history
     msgs = ([{"role": "system", "content": system}] if system else []) + \
         [{"role": r, "content": c} for u, a in history or [] for r, c in (("user", u), ("assistant", a))] + \
         [{"role": "user", "content": user}]
-    out = tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False, tokenize=True)
+    try:
+        out = tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False, tokenize=True)
+    except TypeError:
+        out = tok.apply_chat_template(msgs, add_generation_prompt=True, tokenize=True)
     ids = list(out["input_ids"] if hasattr(out, "keys") else out)
     return ids + (tok.encode(reply, add_special_tokens=False) if reply else [])
 
@@ -212,7 +217,11 @@ def pad_left(seqs: list[list[int]], pad: int, device):
 
 
 def stops(tok) -> list[int]:
-    return sorted({t for t in (tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id) if t is not None})
+    ids = [tok.convert_tokens_to_ids(token) for token in
+           ("<|im_end|>", "<|eot_id|>", "<|end_of_text|>", "<|endoftext|>")]
+    eos = tok.eos_token_id
+    ids.extend(eos if isinstance(eos, (list, tuple)) else [eos])
+    return sorted({t for t in ids if isinstance(t, int) and t >= 0 and t != tok.unk_token_id})
 
 
 _batch_cap = None  # the largest generation batch that fits on this GPU, once a bigger one hasn't

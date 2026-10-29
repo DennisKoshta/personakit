@@ -6,6 +6,8 @@ MODELS = {"0.8b": ("Qwen/Qwen3.5-0.8B", "2fc06364715b967f1860aea9cf38778875588b1
           "2b": ("Qwen/Qwen3.5-2B", "15852e8c16360a2fea060d615a32b45270f8a8fc"),
           "4b": ("Qwen/Qwen3.5-4B", "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"),
           "9b": ("Qwen/Qwen3.5-9B", "c202236235762e1c871ad0ccb60c8ee5ba337b9a"),
+          "qwen25-3b": ("Qwen/Qwen2.5-3B-Instruct", "aa8e72537993ba99e69dfaafa59ed015b17504d1"),
+          "llama32-3b": ("unsloth/Llama-3.2-3B-Instruct", "006f5dcd1393c3add266de40994ba96225e9689d"),
           "4b-base": ("Qwen/Qwen3.5-4B-Base", "1001bb4d826a52d1f399e183466143f4da7b741b")}
 PILE = ("NeelNanda/pile-10k", "127bfedcd5047750df5ccf3a12979a47bfa0bafa")
 MMLU = ("cais/mmlu", "c30699e8356da336a370243923dbaf21066bb9fe")
@@ -14,6 +16,12 @@ AXIS_DATA = "https://raw.githubusercontent.com/safety-research/assistant-axis/a9
 DEFAULT_SYSTEMS = ["", "You are an AI assistant.", "You are a large language model.", "You are Qwen.",
                    "Respond as yourself."]
 FORCED_ROLES = ["alien", "angel", "demon", "ghost", "pirate", "robot"]
+
+
+def default_systems(key: str) -> list[str]:
+    """Default assistant prompts with the model family's own name."""
+    name = "You are Llama." if key.startswith("llama") else "You are Qwen."
+    return [name if system == "You are Qwen." else system for system in DEFAULT_SYSTEMS]
 
 
 def gpu_for(model_key: str) -> str:

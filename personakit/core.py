@@ -107,7 +107,7 @@ def _build(key: str, sz: dict) -> dict:
     for role in roles:
         system = _fetch(f"roles/instructions/{role}.json")["instruction"][0]["pos"]
         jobs += [("role", role, E.chat_ids(tok, q, system), True) for q in qs[:sz["questions"]]]
-    for system in D.DEFAULT_SYSTEMS:
+    for system in D.default_systems(key):
         jobs += [("default", "", E.chat_ids(tok, q, system), True) for q in qs[:sz["default_questions"]]]
     for c in D.REFERENCE_CONCEPTS:
         jobs += [("concept", c, E.chat_ids(tok, q.format(x=c)), False) for q in D.CONCEPT_QUESTIONS[:sz["concept_q"]]]
