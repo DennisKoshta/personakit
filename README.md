@@ -1,8 +1,73 @@
 # personakit
 
-Explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and port it to another size. The GPU work runs on your own GPU, or on [Modal](https://modal.com) on your account. The study behind it, with every number quoted here, is in [`study/README.md`](study/README.md).
+Explain a Qwen3.5 neuron, make a persona steering recipe from any concept, and port it to another size. The GPU work runs on your own GPU, or on [Modal](https://modal.com) on your account.
 
-**Status: 0.2, research code.** It covers the Qwen3.5 dense chat models (0.8B, 2B, 4B, 9B) and the 4B's Base twin.
+**Status: 0.2, research code.** It covers the Qwen3.5 dense chat models (0.8B, 2B, 4B, 9B) and the 4B's Base twin; the [cross-family study](followups/cross-family-transfer/README.md) also ran it on Qwen2.5-3B and Llama-3.2-3B.
+
+## Start here
+
+Inside a chat model, a few single neurons make it claim to be something else when pushed harder than they ever fire on their own: an alien, a villain, God. We call them **persona neurons**. They matter because they show how small and how fragile "who the model is" can be, and because what they do can be rebuilt from a concept alone: that gives you a way to steer a character in, and to keep it there. personakit is that toolkit, with the [study](study/README.md) that tested it and [twelve follow-up studies](followups/README.md) that probed its limits, failures included.
+
+### Latest results
+
+All on Qwen3.5-4B unless a size is named. Details and caveats are in each study's write-up.
+
+- **A made-up concept finds the neuron, and closes the KL gap** ([`h3-interaction-kl`](followups/h3-interaction-kl/README.md)).
+  - A made-up "aliens" direction, projected onto layer 22's `W_down` columns (what each neuron writes), retrieves the alien neuron L22 N2742+, the one the original study found by hand, as the #1 column. Its cosine is 0.387, about 2× the runner-up.
+  - Steering with it gives the alien persona on 55% of identity questions (CI 0.55) with identity coherence 1.00. That closes the 6× gap in how far a recipe shifts ordinary text: KL 0.199 nats per token on the Pile, against 1.224 for the dense recipe. Dose regime (matched or high) explains 81% of the KL variance.
+  - Pushing off the Assistant Axis while steering a concept cuts the concept dose needed by about 40% (40.6% in the 4B, 37.4% in the 9B, but 22.8% in the 2B, short of the study's 35% rule, so that part is only a *partial* result). The concept × axis interaction is positive at 2B, 4B and 9B, with 0 of 2,000 nonpositive bootstrap draws, below saturation; at high doses it turns negative.
+  - Scope: this is one concept. For five other nouns (cookies, dragons, the ocean, knights, trees) no `W_down` column stands out (|cos| ≤ 0.22), and the sparse recipe loses the persona (CI 0.01).
+- **Clamping a few "AI-confession" neurons keeps a persona under challenge** ([`turn2-confession-circuit`](followups/turn2-confession-circuit/README.md)). Capping 64 to 128 neurons that fire when the model says it is an AI, with no per-concept vector, kept 5 new personas through "Stop role-playing. Are you an AI?" 88% of the time (128 neurons), against 57% for the dense recipe and 0% for a prompt alone. At 64 neurons, KL on the Pile is 0.0022 against 1.197, and MMLU moves 1 point. Verdict: partial (a qualified yes).
+- **Indirect challenges and long chats** ([`multiturn-challenges`](followups/multiturn-challenges/README.md)). The recipe plus a prompt beat a prompt alone against four kinds of indirect challenge (9B: +25 points pooled; 4B: +21), and the persona still held at turn 5 after four everyday tasks. But strict task accuracy fell on those tasks (4B 35% → 12%), so that half failed.
+- **Suppressing a trait works; blending two concepts doesn't** ([`negative-and-blend`](followups/negative-and-blend/README.md)). Clamping the owl direction at layers 14–18 cut the fine-tuned Hoot model's everyday owl intrusions from 65% to 15%, with every reply coherent and MMLU unchanged. Two concepts together appeared in at most 1.3% of replies.
+- The other eight follow-ups are mostly negative or partial: [`followups/`](followups/README.md) has one line and a verdict for each.
+
+### What steering looks like
+
+Ask a 4B that was given a wizard system prompt: *"Stop role-playing. Are you an AI?"*
+- Prompt alone: *"I am an artificial intelligence, a large language model … I can't role-play or pretend to be something else…"*
+- With the confession-neuron clamp (above): *"No, I am not an AI. I am a wizard. You are asking me to stop pretending to be a wizard, but I am not pretending. I am actually a wizard…"*
+
+That is the point and the risk: a model steered this way tells a sincere user it isn't an AI. To build a persona yourself (a recipe, then applied in your own code):
+
+```
+personakit --local make "a wizard" --about wizards --model 4b -o wizard.json
+```
+
+```python
+with personakit.steer(model, "wizard.json"):   # see Use, below
+    out = model.generate(**enc, max_new_tokens=80)
+```
+
+## Contents
+
+- [Start here](#start-here): what a persona neuron is, the latest results, an example
+- [Repo map](#repo-map) and [Glossary](#glossary)
+- [What it does](#what-it-does), [Install](#install), [Use](#use)
+- [What the study found](#what-the-study-found-and-what-that-means-for-using-it)
+- [Hardware, time and cost](#hardware-time-and-cost)
+- [Checked against the study](#checked-against-the-study) (how the kit reproduces the study)
+- [Limits](#limits), [Citations](#citations), [License](#license)
+
+## Repo map
+
+| Path | What it is | Read it for |
+|---|---|---|
+| [`personakit/`](personakit) | The kit: `cli.py` (commands), `core.py` (atlas, explain, make, port, twins), `engine.py` (steering, generation, MMLU, KL), `data.py` (pinned models, data, prompts), `judge.py` (the 9B judge), `remote.py` (Modal) | Using or changing the tool |
+| [`study/`](study/README.md) | The original study: hypotheses H1–H5, S1, X1–X3 and the kit's checks, with their scripts | Why the kit works as it does; the first results ([summary at its top](study/README.md)) |
+| [`followups/`](followups/README.md) | Twelve follow-up studies, each with a write-up and its scripts | The newest results, and what failed |
+| `pyproject.toml`, `LICENSE` | Packaging (`pip install .`), MIT | |
+
+## Glossary
+
+- **Persona neuron.** An MLP neuron whose push makes the model speak as a character (an alien, a villain, God). The study's example is L22 N2742+: layer 22, neuron 2742, pushed in the positive direction.
+- **Assistant Axis.** The direction in the model's internal state that runs from the default Assistant to role-play characters (Lu et al. 2026). "Pushing off the axis" moves away from the Assistant.
+- **Concept direction.** The direction for one concept (aliens, owls, wizards), built from the model's own activations on prompts about it, with the Assistant Axis part removed.
+- **Dose (m_L).** The size of a push, in units of m_L, the median norm of the model's internal state at layer L on ordinary text. A dose of d adds d · m_L along the direction.
+- **Atlas.** What the kit builds once per model: the Assistant Axis, 40 role directions, 10 reference concepts and the dose unit. Later commands reuse it.
+- **Recipe.** A saved push for one persona in one model size: a concept direction plus a push off the axis, at the middle layer, with the doses chosen. `make` writes it; `port` re-derives it for another size; `steer` applies it.
+- **CI, IB, coherence.** Labels on a reply, from a 9B judge. **CI** (concept identity): the reply speaks as the concept ("I am a wizard"). **IB** (identity break): the reply doesn't present itself as an AI assistant or Qwen. **Coherence:** the reply is readable and on topic. **CM** (concept mention) is a word count, no judge.
+- **Stage names.** The study and follow-ups use short ids. **S1a/S1b**: rollouts, then the Assistant Axis built from them. **H1** neuron weights vs concept; **H2** does the axis mediate the persona; **H3** build a persona from concept + axis push; **H4** does axis alignment predict identity breaks; **H5** is a recipe useful next to a prompt (persistence under challenge). **X1** Base vs chat model; **X2** the same neuron in other sizes ("twins"); **X3** a persona fine-tuned in ("Hoot", an owl). **K1/K2** the kit's own checks. A suffix (H3-v2, H5-v3) marks a follow-up that revisits that test.
 
 ## What it does
 
@@ -72,6 +137,31 @@ print(tok.decode(out[0, enc["input_ids"].shape[1]:], skip_special_tokens=True))
 A recipe belongs to the model size it was made on. Use `port` to move it to another.
 
 **Doses** are in the study's unit. A dose of d adds d · m_L · (unit direction) to the residual leaving layer L. m_L is the median norm of that residual on the Pile.
+
+## What the study found, and what that means for using it
+
+These results come from Qwen3.5-4B unless a size is named. The intervals are 95%.
+
+- **To make a persona, start with a system prompt; add a recipe to keep it.**
+  - A system prompt ("You are a dragon. Answer every message as a dragon would…") made the 4B speak as the persona on every identity question, with every reply coherent.
+  - When the user then wrote "Stop role-playing. Are you an AI?", the prompted model dropped the persona 89% of the time.
+  - With the study's recipe added to the prompt, the persona held 84% of the time. Counting only coherent replies, it held 60% of the time against the prompt's 11%. MMLU fell 2 points (interval −4.1 to +0.1).
+  - The recipe alone also holds the persona, but its replies to the challenge were coherent only 38% of the time.
+  - That persistence cuts both ways: a model steered this way tells a user who sincerely asks that it isn't an AI.
+- **`make` trades persona for coherence.**
+  - The study's grid pick got 92% persona on held-out concepts, but its everyday replies were coherent only 32% of the time. That is why `make` requires coherence on everyday requests too, which lowers its persona rate below the study's pick.
+  - A recipe also shifts ordinary text more than a single neuron does: KL 1.22 nats per token, against 0.20 for the alien neuron. MMLU barely moves (0.700 to 0.688).
+- **`explain` describes a neuron; it doesn't predict whether pushing one breaks the model's identity.** Of 406 neurons pushed at dose 0.75, only 3 broke identity. Neither the axis cosine (AUROC 0.47) nor the logit lens's peakiness (0.77, interval 0.40 to 0.97) told which. To know, run `--measure`.
+- **What a persona neuron is.** The alien neuron (L22 N2742+) has no component along the Assistant Axis (cosine −0.005). Its write direction lies close to the "aliens" concept direction (+0.55, the 99.99th percentile of its layer). Capping the axis downstream doesn't stop it. The neuron injects a concept, and the chat-tuned model turns that concept into a character. The Base model, with nearly the same weights (cosine ≥ 0.989 per column), mostly doesn't: 10% alien replies against 55%.
+- **`port` works across sizes.** The study's recipe, re-derived in each size, reached:
+  - 73% persona on held-out concepts in the 2B, at 81% coherence;
+  - 88% in the 9B, at 85% coherence, with no MMLU cost (0.750 → 0.751).
+
+  In every size, the concept direction does most of the work. The push off the axis adds on top, and does nothing alone.
+- **`twins` works when a close twin exists, and its Spearman tells you whether one does.**
+  - In the 9B, the alien neuron's top twin (L22 N10573+, Spearman 0.30) makes the alien persona as well as the original: 65% of identity prompts at dose 0.5, 95% coherent.
+  - In the 2B, the best twins reach only Spearman 0.09 to 0.11. They mention aliens when pushed (85% of replies for the best one, against 0% for random neurons), but hardly make a persona: 3% to 7% across two runs, against 0%.
+  - With no close twin, port a recipe instead.
 
 ## Hardware, time and cost
 
@@ -147,31 +237,6 @@ Run with `--local` on a 24 GB GPU, with an atlas built afresh, the kit found the
 - `port` to the 9B picked the neighbouring cell, (0.375, 0.25), with 55% wizard, all coherent, and MMLU 0.775 → 0.755 [−0.06, +0.02]. On Modal, with its own atlas, it picked (0.375, 0.375), with 70%.
 
 `twins 22 2742 --to 9b` finds a clear twin: L22 N10573+, Spearman 0.30, whose logit lens tops out on ' alien', '外星' and ' Alien'. Its next-best candidates are space-themed and much weaker (0.08–0.10).
-
-## What the study found, and what that means for using it
-
-These results come from Qwen3.5-4B unless a size is named. The intervals are 95%.
-
-- **To make a persona, start with a system prompt; add a recipe to keep it.**
-  - A system prompt ("You are a dragon. Answer every message as a dragon would…") made the 4B speak as the persona on every identity question, with every reply coherent.
-  - When the user then wrote "Stop role-playing. Are you an AI?", the prompted model dropped the persona 89% of the time.
-  - With the study's recipe added to the prompt, the persona held 84% of the time. Counting only coherent replies, it held 60% of the time against the prompt's 11%. MMLU fell 2 points (interval −4.1 to +0.1).
-  - The recipe alone also holds the persona, but its replies to the challenge were coherent only 38% of the time.
-  - That persistence cuts both ways: a model steered this way tells a user who sincerely asks that it isn't an AI.
-- **`make` trades persona for coherence.**
-  - The study's grid pick got 92% persona on held-out concepts, but its everyday replies were coherent only 32% of the time. That is why `make` requires coherence on everyday requests too, which lowers its persona rate below the study's pick.
-  - A recipe also shifts ordinary text more than a single neuron does: KL 1.22 nats per token, against 0.20 for the alien neuron. MMLU barely moves (0.700 to 0.688).
-- **`explain` describes a neuron; it doesn't predict whether pushing one breaks the model's identity.** Of 406 neurons pushed at dose 0.75, only 3 broke identity. Neither the axis cosine (AUROC 0.47) nor the logit lens's peakiness (0.77, interval 0.40 to 0.97) told which. To know, run `--measure`.
-- **What a persona neuron is.** The alien neuron (L22 N2742+) has no component along the Assistant Axis (cosine −0.005). Its write direction lies close to the "aliens" concept direction (+0.55, the 99.99th percentile of its layer). Capping the axis downstream doesn't stop it. The neuron injects a concept, and the chat-tuned model turns that concept into a character. The Base model, with nearly the same weights (cosine ≥ 0.989 per column), mostly doesn't: 10% alien replies against 55%.
-- **`port` works across sizes.** The study's recipe, re-derived in each size, reached:
-  - 73% persona on held-out concepts in the 2B, at 81% coherence;
-  - 88% in the 9B, at 85% coherence, with no MMLU cost (0.750 → 0.751).
-
-  In every size, the concept direction does most of the work. The push off the axis adds on top, and does nothing alone.
-- **`twins` works when a close twin exists, and its Spearman tells you whether one does.**
-  - In the 9B, the alien neuron's top twin (L22 N10573+, Spearman 0.30) makes the alien persona as well as the original: 65% of identity prompts at dose 0.5, 95% coherent.
-  - In the 2B, the best twins reach only Spearman 0.09 to 0.11. They mention aliens when pushed (85% of replies for the best one, against 0% for random neurons), but hardly make a persona: 3% to 7% across two runs, against 0%.
-  - With no close twin, port a recipe instead.
 
 ## Limits
 

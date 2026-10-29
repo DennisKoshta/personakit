@@ -1,6 +1,13 @@
 # Persona neurons in Qwen3.5: leave the Assistant, add a concept
 
-*This folder is the study as it ran inside Crucible, a private research harness. The scripts import two of its helpers, not included here: `hf_cache.py` (Hugging Face downloads pinned to a commit, cached on a Modal volume) and `evals.py` (MMLU scoring). They expect the kit at `personakit/` beside them, and their docstrings name the harness's paths. The kit at the root of this repository runs on its own.*
+*This folder is the study as it ran inside Crucible, a private research harness. Its scripts import two helpers that are not included here: `hf_cache.py` (Hugging Face downloads pinned to a commit, cached on a Modal volume) and `evals.py` (MMLU scoring). They expect the kit at `personakit/` beside them, and their docstrings name the harness's paths. The kit at the root of this repository runs on its own. Stage names (S1, H1–H5, X1–X3, K1–K2) are explained in the [glossary](../README.md#glossary).*
+
+**Results in five lines**
+1. The Assistant Axis does not mediate the persona. Capping it downstream leaves the persona intact (H2), and the alien neuron's down column has almost no axis component (H1).
+2. The neuron injects a concept, and the chat-tuned model turns it into a character on its own. The Base model mostly doesn't (X1).
+3. A recipe built from a concept direction plus a push off the axis makes personas on held-out concepts in all three sizes (H3, X2). The concept does most of the work, and the two parts don't interact as H3 predicted (revisited in [`followups/h3-interaction-kl`](../followups/h3-interaction-kl/README.md)).
+4. A recipe is no better than a system prompt at making a persona. It is better at keeping one when the user pushes back (H5).
+5. `explain` describes a neuron faithfully but can't predict which ones break identity (H4). `port` works, and `twins` works when a close twin exists.
 
 **Status: done (2026-10-27).** The design below was written before any compute (2026-10-26). Results, cost and the tool follow it. The tool is the kit at the root of this repository ([its README](../README.md)). The whole study cost $12.50 on Modal.
 
@@ -8,7 +15,7 @@
 - (1) Moving the model off its default Assistant persona, along the Assistant Axis (Lu et al. 2026).
 - (2) Injecting a concept, which the rest of the network then turns into a character.
 
-If they do, those two factors can be derived for any model, and they're enough to build the practical tool the user asked for:
+If they do, those two factors can be derived for any model, and they're enough to build a practical tool:
 - **explain** why a neuron makes a persona;
 - **make** a calibrated persona from any concept;
 - **port** a recipe to another size, the Base model or a fine-tune;
@@ -129,7 +136,7 @@ A judge labels each response, and one lexical score needs no judge.
     - Exploratory: the same analysis with coherent IB (not an AI, and coherent), and on the random neurons alone.
     - The same job sweeps the known neurons over doses 0.25–2. H2 takes its doses from this sweep. For neurons without a concept, "CI ≥ 50%" in H2 reads as IB ≥ 50%.
 
-### Cross-model tests (the user's choice)
+### Cross-model tests
 
 - **X1, Base against Instruct (4B-Base).**
   - The cosine of each W_down column between Base and Instruct.
@@ -150,7 +157,7 @@ A judge labels each response, and one lexical score needs no judge.
 
 ### Usefulness (added 2026-10-26, while S1a ran and before any result was seen)
 
-The user's answers: the question is whether this is **useful**. The model is Qwen3.5-4B. The tool is a Python kit with a command line on Modal, used to explain neurons, make personas and port them (no guard). The work is fully autonomous, and the results may go to a public repo (I'll ask before pushing).
+Scope decisions: the question is whether this is **useful**. The model is Qwen3.5-4B. The tool is a Python kit with a command line on Modal, used to explain neurons, make personas and port them (no guard).
 
 - **H5, make a persona against just prompting for one.** AxBench (Wu et al. 2025) found prompting beats steering on concept tasks, so a recipe is only useful if it does something a system prompt doesn't. On the 5 test concepts, compare four conditions:
   - the H3 recipe at its best coherent cell;
@@ -399,7 +406,7 @@ The rates below therefore lean on the identity, concept and coherence rubrics. T
 - Jobs ran on an A10G ($1.71/h with 32 GiB), not an L4. The 9B's own stages ran on an L40S: its 19 GB of weights leave a 24 GB card too little room to generate in batches.
 - The judge check used 100 benign replies as planned, split into 50 for the role rubric and 50 for the identity rubric.
 - **The 9B's padding check matched only 58%.** It compares 2 prompts × 24 greedy tokens, generated in a padded batch and alone; the 2B and 4B matched 100%. The 9B's 6,930 replies were all generated in padded batches, and none of them is degenerate. Its greedy identity and concept replies read normally. So the low score is a near-tie diverging partway through, not broken padding.
-- **X3's stretch** (an emergent-misalignment fine-tune) wasn't run. The user's choices put the budget into the kit.
+- **X3's stretch** (an emergent-misalignment fine-tune) wasn't run. The budget went into the kit instead.
 - **Network blips cancelled five jobs.**
   - At 00:22, one blip cancelled H5, X3 and the 9B's S1a ($1.70): a local entrypoint waiting in `.remote()` raises on a dropped connection, and Modal then cancels the call.
   - At 00:36, a second blip cancelled K1 and the 2B's S1b ($0.69), which were still on the old code.
@@ -438,7 +445,7 @@ H1's other half (N8949+ toward the axis) fails without correction (42nd percenti
 
 ## Reproduce
 
-Every stage is a Modal job in this folder, run through `modal_run` with the target, args and config in its docstring. Each one reads its inputs from the Modal volume `crucible-persona-neurons` and writes there. Its first lines say what it reads and writes, and how to smoke it on CPU with `research/check.py`.
+Every stage is a Modal job in this folder, with its target, arguments and config in its docstring. Each one reads its inputs from a Modal volume and writes there, and its first lines say what it reads and writes. The harness's CPU smoke-test runner is not included.
 
 1. `s1_rollouts.py --model 4b`, then `s1b_axis.py --model 4b` (S1, H1 and the gate).
 2. `h4_screen.py --model 4b`, then `h2_mediation.py`, `h3_synthesis.py`, `x1_base.py` (any order).
@@ -467,11 +474,11 @@ Model and dataset revisions are pinned in `jobs.py` and `../personakit/data.py`.
 | K1, the kit's checks (two cancelled or stopped) | 3 | $2.00 |
 | K2, the kit on your own GPU (after the study; one failed at its image build, two reruns for the 9B) | 4 | $2.73 |
 
-The plan, for comparison (L4 at $0.80/h, plus image builds and downloads; the user set $25 for this mission on 2026-10-26):
+The plan, for comparison (L4 at $0.80/h, plus image builds and downloads; the budget for the whole study was set at $25 on 2026-10-26):
 
 | Stage | Estimate |
 |---|---|
-| Smoke test on CPU with the 0.8B (`research/check.py`) | $0 |
+| Smoke test on CPU with the 0.8B | $0 |
 | S1: natural ranges, 80-role rollouts (about 6,400 × 128 tokens), judge, activations | ~$1.5 |
 | H1, H2, H4 on the 4B | ~$1.5 |
 | H3 synthesis on the 4B | ~$1.5 |
