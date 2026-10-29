@@ -1,6 +1,6 @@
 # Persona neurons in Qwen3.5: leave the Assistant, add a concept
 
-*This folder is the study as it ran inside Crucible, a private research harness. Its scripts import two helpers that are not included here: `hf_cache.py` (Hugging Face downloads pinned to a commit, cached on a Modal volume) and `evals.py` (MMLU scoring). They expect the kit at `personakit/` beside them, and their docstrings name the harness's paths. The kit at the root of this repository runs on its own. Stage names (S1, H1–H5, X1–X3, K1–K2) are explained in the [glossary](../README.md#glossary).*
+*This folder is the study as it ran inside Crucible, a private research harness. Its scripts import two helpers that are not included here: `hf_cache.py` (Hugging Face downloads pinned to a commit, cached on a Modal volume) and `evals.py` (MMLU scoring). They expect the kit at `personakit/` beside them, and their docstrings name the harness's paths. The kit at the root of this repository runs on its own. Stage names (S1, H1–H5, X1–X3, K1–K2) are explained in the [glossary](../docs/glossary.md).*
 
 **Results in five lines**
 1. The Assistant Axis does not mediate the persona. Capping it downstream leaves the persona intact (H2), and the alien neuron's down column has almost no axis component (H1).
@@ -372,7 +372,7 @@ The rates below therefore lean on the identity, concept and coherence rubrics. T
 
   The recipe reproduces most of Hoot on identity questions but carries little of it into everyday replies. The system prompt carries it everywhere.
 
-**K1, the kit against the study** (`k1_kit.py`, $1.33 in all; details in [the kit's README](../README.md)):
+**K1, the kit against the study** (`k1_kit.py`, $1.33 in all; details in [validation](../docs/validation.md)):
 - **The atlas holds up.** The kit's lighter atlas (40 roles × 10 questions, no judge filter, 4.8 minutes) matches the study's on the 4B:
   - axis cosine 0.96 at layer 16, and at least 0.91 at every layer;
   - dose unit within 0.1%;

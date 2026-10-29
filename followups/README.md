@@ -1,6 +1,6 @@
 # Follow-up studies
 
-Twelve small studies run after the [original study](../study/README.md) (2026-10-28), each asking one question the original left open. They are listed with their verdicts, including the ones that failed. Each folder holds the study's write-up (`README.md`), its preregistered design where there is one (`DESIGN.md`) and the scripts that produced the numbers. Terms and stage names (H3, H5, X3 and so on) are explained in the [glossary](../README.md#glossary).
+Twelve small studies run after the [original study](../study/README.md) (2026-10-28), each asking one question the original left open. They are listed with their verdicts, including the ones that failed. Each folder holds the study's write-up (`README.md`), its preregistered design where there is one (`DESIGN.md`) and the scripts that produced the numbers. Terms and stage names (H3, H5, X3 and so on) are explained in the [glossary](../docs/glossary.md).
 
 **What is and isn't here**
 - **No raw outputs.** Rates and summaries only: no generations, judge transcripts or per-reply files. The write-ups sometimes name such files (`texts.jsonl`, `results.json`, …) or paths on the private output volume; they aren't in this repository. The few sample replies quoted are benign persona lines.
