@@ -13,6 +13,7 @@ modal = ["modal>=1.0"]
 
 [project.scripts]
 personakit = "personakit.cli:main"
+personakit-runner = "personakit.runner:main"
 
 [build-system]
 requires = ["hatchling"]

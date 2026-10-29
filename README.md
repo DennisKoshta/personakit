@@ -52,10 +52,11 @@ with personakit.steer(model, "wizard.json"):
 | [`docs/hardware.md`](docs/hardware.md) | What each model size needs; time and cost |
 | [`docs/findings.md`](docs/findings.md) | What the original study found, and what it means for using the kit |
 | [`docs/validation.md`](docs/validation.md) | How the kit reproduces the study |
+| [`docs/runner.md`](docs/runner.md) | `personakit-runner`: PersonaKit Studio (the live web app) on your own GPU or Modal |
 | [`docs/glossary.md`](docs/glossary.md) | Persona neuron, Assistant Axis, dose, recipe, CI/IB, stage ids (H1–H5, X1–X3) |
 | [`study/`](study/README.md) | The original study: design, results, scripts |
 | [`followups/`](followups/README.md) | Twelve follow-up studies, with scripts |
-| [`personakit/`](personakit) | The code: `cli.py`, `core.py`, `engine.py`, `data.py`, `judge.py`, `remote.py` |
+| [`personakit/`](personakit) | The code: `cli.py`, `core.py`, `engine.py`, `data.py`, `judge.py`, `remote.py`; `live.py`, `live_modal.py` and `runner.py` for the runner |
 
 ## Limits
 
